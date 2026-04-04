@@ -1,0 +1,10 @@
+import express from 'express';
+import protect from '../middleware/auth.js';
+import { getEntries, startTimer, stopTimer, deleteEntry } from '../controllers/timeEntryController.js';
+const router = express.Router();
+router.use(protect);
+router.get('/', getEntries);
+router.post('/start', startTimer);
+router.put('/stop/:id', stopTimer);
+router.delete('/:id', deleteEntry);
+export default router;
