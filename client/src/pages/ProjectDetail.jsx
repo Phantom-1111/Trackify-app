@@ -19,24 +19,29 @@ export default function ProjectDetail() {
   useEffect(() => {
     api.get(`/projects/${id}`).then(r => setProject(r.data));
     api.get(`/time-entries?project=${id}`).then(r => setEntries(r.data));
+    
+    // Fetch the active timer to sync with backend
+    api.get('/time-entries/active/current').then(r => {
+      if (r.data) {
+        startTimer(r.data);
+        // Calculate elapsed time from backend
+        const elapsed = Math.round((new Date() - new Date(r.data.startTime)) / 1000);
+        setElapsed(elapsed);
+      }
+    }).catch(err => console.error('Error fetching active timer:', err));
+    
     // Clear description when navigating to different project
     setDesc('');
   }, [id]);
 
   const handleStartTimer = async () => {
-    // If a timer is already running for a different project, stop it first
-    if (activeTimer && activeTimer.projectId !== id) {
-      try {
-        await api.put(`/time-entries/stop/${activeTimer._id}`);
-        stopTimer();
-      } catch (err) {
-        console.error('Failed to stop previous timer:', err);
-      }
+    try {
+      const res = await api.post('/time-entries/start', { projectId: id, description: desc });
+      startTimer(res.data);
+      setDesc(''); // Clear description after starting
+    } catch (err) {
+      console.error('Failed to start timer:', err);
     }
-    
-    const res = await api.post('/time-entries/start', { projectId: id, description: desc });
-    startTimer(res.data);
-    setDesc(''); // Clear description after starting
   };
 
   const handleStopTimer = async () => {
@@ -132,7 +137,7 @@ export default function ProjectDetail() {
         </div>
 
         {/* Timer */}
-        {activeTimer && activeTimer.projectId && activeTimer.projectId !== id ? (
+        {activeTimer && activeTimer.project && activeTimer.project !== id ? (
           <div style={{
             background: 'rgba(200,240,77,0.08)', border: '1px solid rgba(200,240,77,0.3)',
             borderRadius: 20, padding: '28px 32px', marginBottom: 32,
@@ -145,33 +150,33 @@ export default function ProjectDetail() {
           </div>
         ) : (
           <div style={{
-            background: 'var(--surface)', border: `2px solid ${activeTimer && (activeTimer.projectId === id || !activeTimer.projectId) ? 'var(--accent)' : 'var(--border)'}`,
+            background: 'var(--surface)', border: `2px solid ${activeTimer && activeTimer.project === id ? 'var(--accent)' : 'var(--border)'}`,
             borderRadius: 20, padding: '28px 32px', marginBottom: 32,
             display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap',
-            boxShadow: activeTimer && (activeTimer.projectId === id || !activeTimer.projectId) ? '0 0 20px rgba(200,240,77,0.15)' : 'none',
+            boxShadow: activeTimer && activeTimer.project === id ? '0 0 20px rgba(200,240,77,0.15)' : 'none',
             transition: 'all 0.3s'
           }}>
             <div style={{
               fontFamily: 'var(--font-head)', fontSize: '2.5rem', fontWeight: 800,
-              color: activeTimer && (activeTimer.projectId === id || !activeTimer.projectId) ? 'var(--accent)' : 'var(--text)', letterSpacing: '0.05em', minWidth: 160
+              color: activeTimer && activeTimer.project === id ? 'var(--accent)' : 'var(--text)', letterSpacing: '0.05em', minWidth: 160
             }}>
               {fmt(elapsed)}
             </div>
             <input placeholder="What are you working on?" value={desc}
               onChange={e => setDesc(e.target.value)}
-              disabled={activeTimer && activeTimer.projectId && activeTimer.projectId !== id}
-              style={{ flex: 1, minWidth: 200, opacity: activeTimer && activeTimer.projectId && activeTimer.projectId !== id ? 0.5 : 1 }} />
+              disabled={activeTimer && activeTimer.project && activeTimer.project !== id}
+              style={{ flex: 1, minWidth: 200, opacity: activeTimer && activeTimer.project && activeTimer.project !== id ? 0.5 : 1 }} />
             <button
-              onClick={activeTimer && (activeTimer.projectId === id || !activeTimer.projectId) ? handleStopTimer : handleStartTimer}
-              disabled={activeTimer && activeTimer.projectId && activeTimer.projectId !== id ? true : (!desc.trim() && !activeTimer)}
+              onClick={activeTimer && activeTimer.project === id ? handleStopTimer : handleStartTimer}
+              disabled={activeTimer && activeTimer.project && activeTimer.project !== id ? true : (!desc.trim() && !activeTimer)}
               style={{
-                background: activeTimer && (activeTimer.projectId === id || !activeTimer.projectId) ? 'var(--danger)' : (desc.trim() && !activeTimer ? project.color : 'var(--muted)'),
+                background: activeTimer && activeTimer.project === id ? 'var(--danger)' : (desc.trim() && !activeTimer ? project.color : 'var(--muted)'),
                 color: activeTimer ? 'white' : '#06070D',
                 padding: '12px 28px', borderRadius: 10, fontFamily: 'var(--font-head)',
-                fontWeight: 700, border: 'none', cursor: (activeTimer && (activeTimer.projectId === id || !activeTimer.projectId)) || (desc.trim() && !activeTimer) ? 'pointer' : 'not-allowed',
-                fontSize: '0.95rem', opacity: (activeTimer && (activeTimer.projectId === id || !activeTimer.projectId)) || (desc.trim() && !activeTimer) ? 1 : 0.5
+                fontWeight: 700, border: 'none', cursor: (activeTimer && activeTimer.project === id) || (desc.trim() && !activeTimer) ? 'pointer' : 'not-allowed',
+                fontSize: '0.95rem', opacity: (activeTimer && activeTimer.project === id) || (desc.trim() && !activeTimer) ? 1 : 0.5
               }}>
-              {activeTimer && (activeTimer.projectId === id || !activeTimer.projectId) ? '⏹ Stop' : '▶ Start'}
+              {activeTimer && activeTimer.project === id ? '⏹ Stop' : '▶ Start'}
             </button>
           </div>
         )}

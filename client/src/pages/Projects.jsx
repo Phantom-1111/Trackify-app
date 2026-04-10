@@ -9,18 +9,86 @@ const COLORS = ['#C8F04D', '#4D7CF0', '#FF4D6D', '#4DFFB4', '#FFB347', '#BF5FFF'
 export default function Projects() {
   const [projects, setProjects] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: '', client: '', description: '', hourlyRate: '', color: COLORS[0] });
+  const [editForm, setEditForm] = useState({ name: '', client: '', description: '', hourlyRate: '', color: '', status: 'active' });
   const { activeTimer } = useTimer();
   const nav = useNavigate();
 
-  const load = () => api.get('/projects').then(r => setProjects(r.data));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    setLoading(true);
+    api.get('/projects').then(r => {
+      setProjects(r.data || []);
+      setLoading(false);
+    }).catch(err => {
+      console.error('Failed to load projects:', err);
+      setProjects([]);
+      setLoading(false);
+    });
+  };
+  
+  useEffect(() => { 
+    load();
+    // Sync active timer from backend on mount
+    api.get('/time-entries/active/current').then(r => {
+      if (r.data) {
+        // Timer is active, make sure context is updated
+        // This will re-render the component with the correct timer state
+      }
+    }).catch(err => console.log('No active timer'));
+  }, []);
 
   const createProject = async () => {
-    await api.post('/projects', form);
-    setShowModal(false);
-    setForm({ name: '', client: '', description: '', hourlyRate: '', color: COLORS[0] });
-    load();
+    try {
+      await api.post('/projects', form);
+      setShowModal(false);
+      setForm({ name: '', client: '', description: '', hourlyRate: '', color: COLORS[0] });
+      load();
+    } catch (err) {
+      console.error('Failed to create project:', err);
+      alert('Failed to create project');
+    }
+  };
+
+  const openEditModal = (project) => {
+    setEditingProject(project);
+    setEditForm({
+      name: project.name,
+      client: project.client || '',
+      description: project.description || '',
+      hourlyRate: project.hourlyRate,
+      color: project.color,
+      status: project.status
+    });
+    setShowEditModal(true);
+  };
+
+  const updateProject = async () => {
+    try {
+      await api.put(`/projects/${editingProject._id}`, editForm);
+      setShowEditModal(false);
+      setEditingProject(null);
+      load();
+    } catch (err) {
+      console.error('Failed to update project:', err);
+      alert('Failed to update project');
+    }
+  };
+
+  const deleteProject = async (projectId) => {
+    if (window.confirm('Are you sure you want to delete this project? This cannot be undone.')) {
+      try {
+        await api.delete(`/projects/${projectId}`);
+        setShowEditModal(false);
+        setEditingProject(null);
+        load();
+      } catch (err) {
+        console.error('Failed to delete project:', err);
+        alert('Failed to delete project');
+      }
+    }
   };
 
   return (
@@ -36,25 +104,35 @@ export default function Projects() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
-          {projects.map(p => (
-            <div key={p._id} onClick={() => nav(`/projects/${p._id}`)}
+          {loading ? (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
+              <p style={{ fontSize: '1.1rem' }}>Loading projects...</p>
+            </div>
+          ) : projects.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
+              <p style={{ fontSize: '1.1rem', marginBottom: 16 }}>No projects yet</p>
+              <p style={{ fontSize: '0.95rem' }}>Create your first project to get started!</p>
+            </div>
+          ) : (
+            projects.map(p => (
+            <div key={p._id}
               style={{
-                background: 'var(--surface)', border: activeTimer?.projectId === p._id ? '2px solid var(--accent)' : '1px solid var(--border)',
+                background: 'var(--surface)', border: activeTimer?.project === p._id ? '2px solid var(--accent)' : '1px solid var(--border)',
                 borderRadius: 20, padding: '28px 28px', cursor: 'pointer',
                 transition: 'all 0.25s', position: 'relative', overflow: 'hidden',
-                boxShadow: activeTimer?.projectId === p._id ? '0 0 20px rgba(200,240,77,0.2)' : 'none'
+                boxShadow: activeTimer?.project === p._id ? '0 0 20px rgba(200,240,77,0.2)' : 'none'
               }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.borderColor = p.color; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = activeTimer?.projectId === p._id ? 'var(--accent)' : 'var(--border)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = activeTimer?.project === p._id ? 'var(--accent)' : 'var(--border)'; }}
             >
               <div style={{
                 position: 'absolute', top: 0, left: 0, right: 0, height: 4,
                 background: p.color || 'var(--accent)'
               }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer' }} onClick={() => nav(`/projects/${p._id}`)}>
                   <h3 style={{ fontFamily: 'var(--font-head)', fontSize: '1.2rem', fontWeight: 700 }}>{p.name}</h3>
-                  {activeTimer?.projectId === p._id && (
+                  {activeTimer?.project === p._id && (
                     <span style={{
                       background: 'rgba(200,240,77,0.2)', color: 'var(--accent)',
                       padding: '4px 8px', borderRadius: 4, fontSize: '0.7rem', fontWeight: 700,
@@ -62,27 +140,38 @@ export default function Projects() {
                     }}>🔴 TIMER</span>
                   )}
                 </div>
-                <span style={{
-                  background: p.status === 'active' ? 'rgba(77,255,180,0.1)' : 'rgba(107,110,133,0.15)',
-                  color: p.status === 'active' ? 'var(--success)' : 'var(--muted)',
-                  padding: '3px 10px', borderRadius: 100, fontSize: '0.75rem', fontWeight: 600
-                }}>{p.status}</span>
+                <button onClick={(e) => { e.stopPropagation(); openEditModal(p); }}
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem',
+                    padding: '4px 8px', color: 'var(--muted)', transition: 'color 0.2s'
+                  }}
+                  onMouseEnter={e => e.target.style.color = 'var(--accent)'}
+                  onMouseLeave={e => e.target.style.color = 'var(--muted)'}>
+                  ⚙️
+                </button>
               </div>
-              <p style={{ color: 'var(--muted)', fontSize: '0.875rem', marginBottom: 20 }}>
+              <span style={{
+                background: p.status === 'active' ? 'rgba(77,255,180,0.1)' : p.status === 'completed' ? 'rgba(200,240,77,0.1)' : 'rgba(255,77,77,0.1)',
+                color: p.status === 'active' ? 'var(--success)' : p.status === 'completed' ? 'var(--accent)' : '#FF4D4D',
+                padding: '6px 12px', borderRadius: 100, fontSize: '0.75rem', fontWeight: 600, textTransform: 'capitalize',
+                marginBottom: 16, display: 'inline-block'
+              }}>{p.status}</span>
+              <p style={{ color: 'var(--muted)', fontSize: '0.875rem', marginBottom: 20, cursor: 'pointer' }} onClick={() => nav(`/projects/${p._id}`)}>
                 {p.client || 'Personal'} {p.description && `· ${p.description.slice(0, 50)}`}
               </p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => nav(`/projects/${p._id}`)}>
                 <span style={{ color: p.color, fontFamily: 'var(--font-head)', fontWeight: 700, fontSize: '1.1rem' }}>
                   ${p.hourlyRate}/hr
                 </span>
                 <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>View details →</span>
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Create Modal */}
       {showModal && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
@@ -122,6 +211,70 @@ export default function Projects() {
               <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <button className="btn-ghost" style={{ flex: 1 }} onClick={() => setShowModal(false)}>Cancel</button>
                 <button className="btn-primary" style={{ flex: 1 }} onClick={createProject}>Create Project</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && editingProject && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200
+        }}>
+          <div style={{
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 24, padding: '40px', width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto'
+          }}>
+            <h2 style={{ fontFamily: 'var(--font-head)', marginBottom: 28 }}>Edit Project</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                { label: 'Project Name *', key: 'name', placeholder: 'e.g. Brand Website' },
+                { label: 'Client Name', key: 'client', placeholder: 'e.g. Acme Corp' },
+                { label: 'Hourly Rate ($)', key: 'hourlyRate', placeholder: '50', type: 'number' },
+                { label: 'Description', key: 'description', placeholder: 'Brief description...' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--muted)', display: 'block', marginBottom: 6 }}>{f.label}</label>
+                  <input type={f.type || 'text'} placeholder={f.placeholder}
+                    value={editForm[f.key]} onChange={e => setEditForm({ ...editForm, [f.key]: e.target.value })} />
+                </div>
+              ))}
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--muted)', display: 'block', marginBottom: 6 }}>STATUS</label>
+                <select value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)',
+                    background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', fontSize: '0.95rem'
+                  }}>
+                  <option value="active">Active</option>
+                  <option value="completed">Completed</option>
+                  <option value="paused">Paused</option>
+                  <option value="payment_pending">Payment Pending</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--muted)', display: 'block', marginBottom: 10 }}>PROJECT COLOR</label>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  {COLORS.map(c => (
+                    <div key={c} onClick={() => setEditForm({ ...editForm, color: c })}
+                      style={{
+                        width: 30, height: 30, borderRadius: '50%', background: c, cursor: 'pointer',
+                        border: editForm.color === c ? `3px solid white` : '3px solid transparent',
+                        transition: 'border 0.2s'
+                      }} />
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                <button className="btn-ghost" style={{ flex: 1 }} onClick={() => setShowEditModal(false)}>Cancel</button>
+                <button style={{
+                  flex: 1, padding: '12px 20px', borderRadius: 10, border: 'none', 
+                  background: '#FF4D4D', color: 'white', fontFamily: 'var(--font-head)',
+                  fontWeight: 700, cursor: 'pointer', fontSize: '0.95rem'
+                }} onClick={() => deleteProject(editingProject._id)}>🗑️ Delete</button>
+                <button className="btn-primary" style={{ flex: 1 }} onClick={updateProject}>Save Changes</button>
               </div>
             </div>
           </div>

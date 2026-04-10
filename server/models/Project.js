@@ -7,7 +7,7 @@ const projectSchema = new mongoose.Schema({
   description: { type: String },
   hourlyRate:  { type: Number, default: 0 },
   color:       { type: String, default: '#6C63FF' },
-  status:      { type: String, enum: ['active', 'completed', 'paused'], default: 'active' },
+  status:      { type: String, enum: ['active', 'completed', 'paused', 'payment_pending'], default: 'active' },
 }, { timestamps: true });
 
 export default mongoose.model('Project', projectSchema);

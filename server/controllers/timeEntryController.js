@@ -8,8 +8,32 @@ export const getEntries = async (req, res) => {
   res.json(entries);
 };
 
+// Get the currently active timer for this user
+export const getActiveTimer = async (req, res) => {
+  const activeEntry = await TimeEntry.findOne({
+    user: req.user.id,
+    endTime: null  // No end time means it's still active
+  });
+  if (!activeEntry) return res.json(null);
+  res.json(activeEntry);
+};
+
 export const startTimer = async (req, res) => {
   const { projectId, description } = req.body;
+  
+  // Check if there's already an active timer for this user
+  const existingActive = await TimeEntry.findOne({
+    user: req.user.id,
+    endTime: null  // Active timer has no end time
+  });
+  
+  // If there is, stop it automatically
+  if (existingActive) {
+    existingActive.endTime = new Date();
+    existingActive.duration = Math.round((existingActive.endTime - existingActive.startTime) / 1000);
+    await existingActive.save();
+  }
+  
   const now = new Date();
   const entry = await TimeEntry.create({
     user: req.user.id,
